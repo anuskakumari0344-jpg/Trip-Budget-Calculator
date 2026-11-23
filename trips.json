@@ -1,0 +1,10 @@
+[
+    {
+        "destination": "gao",
+        "transport": 500.0,
+        "stay": 1200.0,
+        "food": 600.0,
+        "activities": 800.0,
+        "total": 3100.0
+    }
+]
