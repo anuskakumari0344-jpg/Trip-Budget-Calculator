@@ -1,255 +1,438 @@
 
+import streamlit as st
+import pandas as pd
+import plotly.express as px
 import json
 import os
+from datetime import date
 
-FILE_NAME = "trips.json"
+# ---------------- CONFIG ----------------
+st.set_page_config(
+    page_title="TripWise",
+    page_icon="✈️",
+    layout="wide"
+)
+
+DATA_FOLDER = "data"
+DATA_FILE = os.path.join(DATA_FOLDER, "trips.json")
+
+os.makedirs(DATA_FOLDER, exist_ok=True)
+
+# ---------------- CUSTOM DESIGN ----------------
+st.markdown("""
+<style>
+.stApp {
+    background-color: #f4f7fb;
+}
+.block-container {
+    padding-top: 1.5rem;
+}
+[data-testid="stMetric"] {
+    background: white;
+    padding: 18px;
+    border-radius: 12px;
+    border: 1px solid #e5eaf0;
+}
+div.stButton > button {
+    border-radius: 10px;
+    height: 45px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
-# Load saved trips
+# ---------------- STORAGE ----------------
 def load_trips():
-    if not os.path.exists(FILE_NAME):
+    if not os.path.exists(DATA_FILE):
         return []
 
     try:
-        with open(FILE_NAME, "r") as file:
+        with open(DATA_FILE, "r") as file:
             data = json.load(file)
 
         if isinstance(data, list):
             return data
-        else:
-            print("Invalid data found. Starting with an empty list.")
-            return []
+
+        return []
 
     except (json.JSONDecodeError, OSError):
-        print("Unable to read saved trips. Starting fresh.")
         return []
 
 
-# Save trips to file
 def save_trips(trips):
-    try:
-        with open(FILE_NAME, "w") as file:
-            json.dump(trips, file, indent=4)
-        return True
-    except OSError:
-        print("Error while saving the trip.")
-        return False
+    with open(DATA_FILE, "w") as file:
+        json.dump(trips, file, indent=4)
 
 
-# Get a non-empty text input
-def get_text(message):
-    while True:
-        value = input(message).strip()
+# ---------------- CALCULATIONS ----------------
+def calculate_total(travel, accommodation, food, activities, other):
+    return travel + accommodation + food + activities + other
 
-        if value:
-            return value
+
+def money(amount):
+    return f"₹{amount:,.2f}"
+
+
+# ---------------- VALIDATION ----------------
+def valid_expense(value):
+    return value >= 0
+
+
+# ---------------- LOAD DATA ----------------
+trips = load_trips()
+
+# ---------------- SIDEBAR ----------------
+st.sidebar.title("✈️ TripWise")
+st.sidebar.caption("Smart Trip Budget Planner")
+
+page = st.sidebar.radio(
+    "Navigation",
+    [
+        "Dashboard",
+        "Plan a Trip",
+        "My Trips",
+        "Budget Analytics",
+        "Reports"
+    ]
+)
+
+st.sidebar.divider()
+st.sidebar.info("Plan your trips. Track your budget. Travel smarter.")
+
+
+# ---------------- DASHBOARD ----------------
+if page == "Dashboard":
+
+    st.title("✈️ TripWise Dashboard")
+    st.write("Plan your next adventure without exceeding your budget.")
+
+    total_trips = len(trips)
+
+    total_budget = sum(
+        float(t.get("budget", 0)) for t in trips
+    )
+
+    total_cost = sum(
+        float(t.get("total", 0)) for t in trips
+    )
+
+    avg_cost = total_cost / total_trips if total_trips else 0
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric("Total Trips", total_trips)
+    col2.metric("Planned Budget", money(total_budget))
+    col3.metric("Estimated Expenses", money(total_cost))
+    col4.metric("Average Trip Cost", money(avg_cost))
+
+    st.divider()
+
+    st.subheader("Recent Trips")
+
+    if trips:
+        df = pd.DataFrame(trips)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No trips yet. Start by planning your first trip!")
+
+    st.subheader("Quick Start")
+
+    if st.button("➕ Plan a New Trip"):
+        st.switch_page("main.py")
+
+
+# ---------------- PLAN A TRIP ----------------
+elif page == "Plan a Trip":
+
+    st.title("🧳 Plan Your Trip")
+    st.write("Enter trip details and estimate your expenses.")
+
+    with st.form("trip_form"):
+
+        destination = st.text_input("Destination")
+        start_location = st.text_input("Starting Location")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            travel_date = st.date_input(
+                "Travel Date",
+                value=date.today()
+            )
+
+        with col2:
+            return_date = st.date_input(
+                "Return Date",
+                value=date.today()
+        )
+
+        travellers = st.number_input(
+            "Number of Travellers",
+            min_value=1,
+            max_value=100,
+            value=1,
+            step=1
+        )
+
+        budget = st.number_input(
+            "Your Budget (₹)",
+            min_value=0.0,
+            value=5000.0,
+            step=500.0
+        )
+
+        st.subheader("Expense Details")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            travel = st.number_input(
+                "Travel Expenses (₹)",
+                min_value=0.0,
+                value=0.0
+            )
+
+            accommodation = st.number_input(
+                "Accommodation Expenses (₹)",
+                min_value=0.0,
+                value=0.0
+            )
+
+            food = st.number_input(
+                "Food Expenses (₹)",
+                min_value=0.0,
+                value=0.0
+            )
+
+        with col2:
+            activities = st.number_input(
+                "Activities & Sightseeing (₹)",
+                min_value=0.0,
+                value=0.0
+            )
+
+            other = st.number_input(
+                "Other Expenses (₹)",
+                min_value=0.0,
+                value=0.0
+            )
+
+        notes = st.text_area("Notes (optional)")
+
+        submit = st.form_submit_button(
+            "💾 Save Trip",
+            use_container_width=True
+        )
+
+    if submit:
+
+        if not destination.strip():
+            st.error("Please enter a destination.")
+
+        elif return_date < travel_date:
+            st.error("Return date cannot be before travel date.")
+
         else:
-            print("Input cannot be empty. Try again.")
 
+            total = calculate_total(
+                travel,
+                accommodation,
+                food,
+                activities,
+                other
+            )
 
-# Get a valid positive number
-def get_amount(message):
-    while True:
-        try:
-            amount = float(input(message))
+            new_trip = {
+                "destination": destination.strip(),
+                "start_location": start_location.strip(),
+                "travel_date": str(travel_date),
+                "return_date": str(return_date),
+                "travellers": int(travellers),
+                "budget": budget,
+                "travel": travel,
+                "accommodation": accommodation,
+                "food": food,
+                "activities": activities,
+                "other": other,
+                "total": total,
+                "notes": notes
+            }
 
-            if amount >= 0:
-                return amount
+            trips.append(new_trip)
+            save_trips(trips)
+
+            st.success("Trip saved successfully!")
+
+            st.subheader("Trip Summary")
+
+            col1, col2, col3 = st.columns(3)
+
+            col1.metric("Total Estimated Cost", money(total))
+            col2.metric("Budget", money(budget))
+            col3.metric("Cost Per Traveller", money(total / travellers))
+
+            if total > budget:
+                st.warning("Your trip estimate exceeds your budget!")
             else:
-                print("Amount cannot be negative.")
-
-        except ValueError:
-            print("Please enter a valid number.")
+                st.success("Your trip is within your budget.")
 
 
-# Add a new trip
-def add_trip(trips):
-    print("\n--- Add New Trip ---")
+# ---------------- MY TRIPS ----------------
+elif page == "My Trips":
 
-    destination = get_text("Enter destination: ")
-    transport = get_amount("Transport cost: ₹")
-    stay = get_amount("Stay cost: ₹")
-    food = get_amount("Food cost: ₹")
-    activities = get_amount("Activity cost: ₹")
-
-    total = transport + stay + food + activities
-
-    trip = {
-        "destination": destination,
-        "transport": transport,
-        "stay": stay,
-        "food": food,
-        "activities": activities,
-        "total": total
-    }
-
-    trips.append(trip)
-
-    if save_trips(trips):
-        print("\nTrip saved successfully!")
-        print("Destination:", destination)
-        print(f"Total estimated budget: ₹{total:.2f}")
-
-
-# Display all trips
-def view_trips(trips):
-    print("\n--- Saved Trips ---")
+    st.title("🗺️ My Trips")
 
     if not trips:
-        print("No trips available.")
-        return
+        st.info("No trips have been saved yet.")
 
-    for i, trip in enumerate(trips, start=1):
-        print(f"\nTrip {i}")
-        print("Destination:", trip["destination"])
-        print(f"Transport: ₹{trip['transport']:.2f}")
-        print(f"Stay: ₹{trip['stay']:.2f}")
-        print(f"Food: ₹{trip['food']:.2f}")
-        print(f"Activities: ₹{trip['activities']:.2f}")
-        print(f"Total: ₹{trip['total']:.2f}")
+    else:
 
+        search = st.text_input("Search destination")
 
-# Search trips by destination
-def search_trip(trips):
-    print("\n--- Search Trip ---")
+        filtered = [
+            t for t in trips
+            if search.lower() in t["destination"].lower()
+        ]
 
-    keyword = get_text("Enter destination to search: ").lower()
-    found = False
+        st.write(f"Trips found: {len(filtered)}")
 
-    for trip in trips:
-        if keyword in trip["destination"].lower():
-            print("\nDestination:", trip["destination"])
-            print(f"Total budget: ₹{trip['total']:.2f}")
-            found = True
+        for i, trip in enumerate(filtered):
 
-    if not found:
-        print("No matching trip found.")
+            with st.expander(
+                f"📍 {trip['destination']} - {money(trip['total'])}"
+            ):
 
+                st.write("Starting Location:", trip.get("start_location", ""))
+                st.write("Travel Date:", trip.get("travel_date", ""))
+                st.write("Return Date:", trip.get("return_date", ""))
+                st.write("Travellers:", trip.get("travellers", 1))
+                st.write("Budget:", money(trip.get("budget", 0)))
 
-# Delete a trip
-def delete_trip(trips):
-    print("\n--- Delete Trip ---")
+                st.write("Travel:", money(trip.get("travel", 0)))
+                st.write("Accommodation:", money(trip.get("accommodation", 0)))
+                st.write("Food:", money(trip.get("food", 0)))
+                st.write("Activities:", money(trip.get("activities", 0)))
+                st.write("Other:", money(trip.get("other", 0)))
 
-    if not trips:
-        print("No trips to delete.")
-        return
+                st.write("Notes:", trip.get("notes", ""))
 
-    view_trips(trips)
+                if trip["total"] > trip["budget"]:
+                    st.warning("Budget exceeded")
+                else:
+                    st.success("Within budget")
 
-    try:
-        number = int(input("\nEnter trip number to delete: "))
+                if st.button("Delete Trip", key=f"delete_{i}"):
 
-        if 1 <= number <= len(trips):
-            removed_trip = trips.pop(number - 1)
+                    trips.remove(trip)
+                    save_trips(trips)
 
-            if save_trips(trips):
-                print(removed_trip["destination"], "trip deleted successfully.")
-        else:
-            print("Invalid trip number.")
-
-    except ValueError:
-        print("Please enter a valid number.")
+                    st.success("Trip deleted.")
+                    st.rerun()
 
 
-# Display budget summary
-def budget_summary(trips):
-    print("\n--- Budget Summary ---")
+# ---------------- ANALYTICS ----------------
+elif page == "Budget Analytics":
+
+    st.title("📊 Budget Analytics")
 
     if not trips:
-        print("No trip data available.")
-        return
+        st.info("Save some trips to view analytics.")
 
-    total_budget = sum(trip["total"] for trip in trips)
-    average_budget = total_budget / len(trips)
+    else:
 
-    highest_trip = max(trips, key=lambda trip: trip["total"])
-    lowest_trip = min(trips, key=lambda trip: trip["total"])
+        df = pd.DataFrame(trips)
 
-    print("Number of trips:", len(trips))
-    print(f"Total budget of all trips: ₹{total_budget:.2f}")
-    print(f"Average trip budget: ₹{average_budget:.2f}")
-    print("Highest budget trip:", highest_trip["destination"])
-    print(f"Highest amount: ₹{highest_trip['total']:.2f}")
-    print("Lowest budget trip:", lowest_trip["destination"])
-    print(f"Lowest amount: ₹{lowest_trip['total']:.2f}")
+        total_spent = df["total"].sum()
+        total_budget = df["budget"].sum()
+
+        col1, col2 = st.columns(2)
+
+        col1.metric("Total Estimated Expenses", money(total_spent))
+        col2.metric("Combined Budget", money(total_budget))
+
+        st.subheader("Expense Breakdown")
+
+        categories = [
+            "travel",
+            "accommodation",
+            "food",
+            "activities",
+            "other"
+        ]
+
+        expense_data = {
+            category: df[category].sum()
+            for category in categories
+        }
+
+        expense_df = pd.DataFrame(
+            list(expense_data.items()),
+            columns=["Category", "Amount"]
+        )
+
+        fig = px.pie(
+            expense_df,
+            names="Category",
+            values="Amount",
+            hole=0.45,
+            title="Trip Expense Distribution"
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.subheader("Budget vs Estimated Cost")
+
+        comparison = pd.DataFrame({
+            "Destination": df["destination"],
+            "Budget": df["budget"],
+            "Estimated Cost": df["total"]
+        })
+
+        fig2 = px.bar(
+            comparison,
+            x="Destination",
+            y=["Budget", "Estimated Cost"],
+            barmode="group",
+            title="Trip Budget Comparison"
+        )
+
+        st.plotly_chart(fig2, use_container_width=True)
 
 
-# Export a simple text report
-def export_report(trips):
-    print("\n--- Export Report ---")
+# ---------------- REPORTS ----------------
+elif page == "Reports":
+
+    st.title("📄 Reports & Export")
 
     if not trips:
-        print("No trip data available to export.")
-        return
+        st.info("No trip data available for export.")
 
-    try:
-        with open("trip_report.txt", "w") as file:
-            file.write("CAMPUSSOLVE - TRIP BUDGET REPORT\n")
-            file.write("=" * 35 + "\n\n")
+    else:
 
-            for i, trip in enumerate(trips, start=1):
-                file.write(f"Trip {i}: {trip['destination']}\n")
-                file.write(f"Transport: ₹{trip['transport']:.2f}\n")
-                file.write(f"Stay: ₹{trip['stay']:.2f}\n")
-                file.write(f"Food: ₹{trip['food']:.2f}\n")
-                file.write(f"Activities: ₹{trip['activities']:.2f}\n")
-                file.write(f"Total: ₹{trip['total']:.2f}\n")
-                file.write("-" * 35 + "\n")
+        df = pd.DataFrame(trips)
 
-            overall_total = sum(trip["total"] for trip in trips)
-            file.write(f"\nOverall Budget: ₹{overall_total:.2f}\n")
+        st.subheader("Trip Report")
+        st.dataframe(df, use_container_width=True)
 
-        print("Report exported as trip_report.txt")
+        csv_data = df.to_csv(index=False).encode("utf-8")
 
-    except OSError:
-        print("Unable to export report.")
+        st.download_button(
+            "⬇️ Download CSV Report",
+            data=csv_data,
+            file_name="trip_report.csv",
+            mime="text/csv"
+        )
 
+        json_data = json.dumps(
+            trips,
+            indent=4
+        ).encode("utf-8")
 
-# Main menu
-def main():
-    trips = load_trips()
+        st.download_button(
+            "⬇️ Download JSON Report",
+            data=json_data,
+            file_name="trip_report.json",
+            mime="application/json"
+        )
 
-    while True:
-        print("\n================================")
-        print("   CAMPUSSOLVE - TRIP BUDGET")
-        print("================================")
-        print("1. Add New Trip")
-        print("2. View All Trips")
-        print("3. Search Trip")
-        print("4. Delete Trip")
-        print("5. Budget Summary")
-        print("6. Export Report")
-        print("7. Exit")
-        print("================================")
-
-        choice = input("Enter your choice (1-7): ").strip()
-
-        if choice == "1":
-            add_trip(trips)
-
-        elif choice == "2":
-            view_trips(trips)
-
-        elif choice == "3":
-            search_trip(trips)
-
-        elif choice == "4":
-            delete_trip(trips)
-
-        elif choice == "5":
-            budget_summary(trips)
-
-        elif choice == "6":
-            export_report(trips)
-
-        elif choice == "7":
-            print("Thank you for using CampusSolve calculator!")
-            break
-
-        else:
-            print("Invalid choice. Please select from 1 to 7.")
-
-
-# Start the program
-if __name__ == "__main__":
-    main()
+        st.success("Your reports are ready to download.")
